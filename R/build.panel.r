@@ -2,12 +2,13 @@
 
 #' build.panel: Build PSID panel data set
 #' 
-#' @description Builds a panel data set in wide format with id variables \code{pid} (unique person identifier) and \code{year} from individual PSID family files and supplemental wealth files.
+#' @description Builds a panel data set with id variables \code{pid} (unique person identifier) and \code{year} from individual PSID family files and supplemental wealth files.
 #' @details 
-#' takes desired variables from family files for specified years in folder \code{datadir} and merges using the id information in \code{IND2015ER.xyz}, which must be in the same directory. The raw data can be supplied in stata .dta format or it can be directly downloaded from the PSID server to folders \code{datadir} or \code{tmpdir}. Notice that currently only stata format <= 12 is supported (so do \code{saveold} in stata). The user can change subsetting criteria as well as sample designs. The package allows the missing variables in certain waves to be accounted for automatically, i.e. the variables are inserted in the missing year as \code{NA}.
+#' There are several supported approches. Approach one downloads stata data, uses stata to build each wave, then puts it together with `psidR`. The second (recommended) approach downloads all data directly from the psid servers (no Stata needed. For this approach you need to supply the precise names of psid variables - those variable names vary by year. E.g. \emph{total family income} will have different names in different waves. The function \code{\link{getNamesPSID}} greatly helps collecting names for all waves.
 #' Merge: the variables \code{interview number} in each family file map to 
 #' the \code{interview number} variable of a given year in the individual file. Run \code{example(build.panel)} for a demonstration.
-#' Accepted input data are stata format .dta, .csv files or R data formats .rda and RData. Similar in usage to stata module \code{psiduse}. Also have a look at \url{http://www.asdfree.com/2013/10/analyze-panel-study-of-income-dynamics.html} for a similar way to acquire the data. In fact, both approaches use the same function \code{save.psid} to download the data, \code{psidR} automates the merge and subsetting proceedure for you. Please go to \url{http://www.asdfree.com} if you want to do variance estimation using the stratification info of the survey in a complex survey design. 
+#' For approach one, accepted input data are stata format .dta, .csv files or R data formats .rda and RData. This usage is similar to stata module \code{psiduse}. 
+#' Approach two follows the strategy introduced at \url{http://asdfree.com}. In fact, both approaches use the same function \code{save.psid} to download the data, \code{psidR} automates the merge and subsetting proceedure for you. 
 #' @param datadir either \code{NULL}, in which case saves to tmpdir or path to directory containing family files ("FAMyyyy.xyz") and individual file ("IND2009ER.xyz") in admissible formats .xyz. Admissible are .dta, .csv, .RData, .rda. Please follow naming convention. Only .dta version <= 12 supported. Recommended usage is to specify \code{datadir}.
 #' @param fam.vars data.frame of variable to retrieve from family files. Can contain see example for required format.
 #' @param ind.vars data.frame of variables to get from individual file. In almost all cases this will be the type of survey weights you want to use. don't include id variables ER30001 and ER30002.
@@ -30,6 +31,8 @@
 #' # Build panel with income, wage, age and education
 #' # ################################################
 #' 
+#' # The package is installed with a list of variables
+#' # Alternatively, search for names with \code{\link{getNamesPSID}}
 #' r = system.file(package="psidR")
 #' f = fread(file.path(r,"psid-lists","famvars.txt"))
 #' i = fread(file.path(r,"psid-lists","indvars.txt"))
@@ -72,9 +75,9 @@
 #' 
 #' # testPSID creates artifical PSID data
 #' td <- testPSID(N=12,N.attr=0)
-#' fam1985 <- copy(td$famvars1985)
-#' fam1986 <- copy(td$famvars1986)
-#' IND2009ER <- copy(td$IND2009ER)
+#' fam1985 <- data.table::copy(td$famvars1985)
+#' fam1986 <- data.table::copy(td$famvars1986)
+#' IND2009ER <- data.table::copy(td$IND2009ER)
 #' 
 #' # create a temporary datadir
 #' my.dir <- tempdir()
@@ -283,7 +286,7 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 				cat('continuing now to build the dataset.\n')
 							
 			} else if (confirm=="no") {
-				break
+				return(0)
 			}
 		}  # end download data
 	}
@@ -515,7 +518,7 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 		   }
 		   yind[,headyes := NULL]
 		} else if (heads.only){
-			# https://psidonline.isr.umich.edu/Guide/FAQ.aspx?Type=ALL#250
+			# https://psidonline.isr.umich.edu/Guide/FAQ.aspx?Type=ALL#250
 			# To create a single year Head/Wife file: 
 			# Select individuals with Relationship to Head of "Head" (a code value of 1 for 1968-1982; code 10 from 1983 onward) 
 			# and with values for Sequence Number in the range 1-20. 
@@ -590,7 +593,7 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 			codes   <- as.character(curvars)
 			nanames <- curnames[na]
 			tmp     <- copy(tmp[,codes[-na],with=FALSE])
-			tmp[,nanames := NA_real_,with=FALSE]
+			tmp[,(nanames) := NA_real_,with=FALSE]
 			setnames(tmp,c(curnames[-na],nanames))
 			setkey(tmp,interview)
 		} else {
@@ -613,7 +616,7 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 		# ==================================
 		# merge m and wealth
 		if (any.wealth){
-			# check if there is a wealth file for this year
+			# check if there is a wealth file for this year
 			iw = grep(years[iy],wlth.dat,value=TRUE)
 			if (length(iw)>0){
 				rm(list=ls(envir=tmp.env),envir=tmp.env)
@@ -704,6 +707,7 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 #' @param wealth logical TRUE if want to use wealth supplements
 #' @return a data.table with panel data
 build.psid <- function(small=TRUE,wealth=FALSE){
+  variable <- name <- NULL
   r = system.file(package="psidR")
   if (small){
     f = fread(file.path(r,"psid-lists","famvars-small.txt"))
@@ -735,5 +739,57 @@ build.psid <- function(small=TRUE,wealth=FALSE){
     save(d,file="~/psid_no_wealth.RData")
   }
 	return(d$data)
+}
+
+
+
+#' GetPSID variables names from various years
+#'
+#' The user can specify one variable name from any year. This function
+#' will find that variable's correct name in any of the years
+#' specified by the user. If user does not specify the \code{years}
+#' variable, return will represent all years in which variable was
+#' present.
+#'
+#' This uses the psid.xlsx crosswalk file from UMich, which is
+#' available at http://psidonline.isr.umich.edu/help/xyr/psid.xlsx. In the 
+#' example, the package openxlsx's read.xlsx is used to import the crosswalk
+#' file.
+#'
+#' Ask for one variable at a time.
+#' @param aname A variable name in any of the PSID years
+#' @param cwf A data.frame representation of the cross-walk file,
+#'     (the psid.xlsx file).
+#' @param years A vector of years. If NULL, all years in which that
+#'     variable existed are returned
+#' @return A vector of names, one for each year.
+#' @author Paul Johnson <pauljohn@@ku.edu>
+#' @export
+#' @examples
+#' # read UMich crosswalk from installed file
+#' r = system.file(package="psidR")
+#' cwf = openxlsx::read.xlsx(file.path(r,"psid-lists","psid.xlsx"))
+#' 
+#' # or download directly
+#' # cwf <- read.xlsx("http://psidonline.isr.umich.edu/help/xyr/psid.xlsx")
+#' 
+#' # then get names with
+#' getNamesPSID("ER17013", cwf, years = 2001)
+#' getNamesPSID("ER17013", cwf, years = 2003)
+#' getNamesPSID("ER17013", cwf, years = NULL)
+#' getNamesPSID("ER17013", cwf, years = c(2005, 2007, 2009))
+getNamesPSID <- function(aname, cwf, years = NULL){
+    myvar <- which(cwf == aname, arr.ind=TRUE)
+    ## variables that begin with Y
+    ynames.all <- grep("^Y", colnames(cwf))
+
+    if (is.null(years)){
+        yearkeep <- ynames.all
+    } else {
+        yearkeep <- paste0("Y", years)
+        yearkeep <- yearkeep[yearkeep %in% colnames(cwf)]
+    }
+    ovalue <- cwf[myvar[1], yearkeep, drop = FALSE]
+    ovalue
 }
 
