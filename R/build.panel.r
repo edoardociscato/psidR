@@ -651,8 +651,8 @@ build.panel <- function(datadir=NULL,fam.vars,ind.vars=NULL,wealth.vars=NULL,SAS
 		# note: a person who does not respond in wave x has an interview number in that wave, but NAs in the family file variables. remove those records.
 		idx <- which(!is.na(unlist(fam.vars[list(years[iy])][,curnames,with=FALSE])))[1]	# index of first non NA variable
 		m[,isna := is.na(m[,curnames[idx],with=FALSE])]
-		m <- copy(m[isna == FALSE])
-		m[,isna := NULL]
+		# m <- copy(m[isna == FALSE])
+		# m[,isna := NULL]
 		# all remaining NAs are NAs which the user knows about and actually requested when specifying fam.vars
 		# if (iy>1)	setcolorder(m,names(datas[[1]]))
 		datas[[iy]] <- copy(m)
