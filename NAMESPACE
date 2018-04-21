@@ -2,6 +2,7 @@
 
 export(build.panel)
 export(build.psid)
+export(get.variable.names)
 export(getNamesPSID)
 export(testPSID)
 import(RCurl)
